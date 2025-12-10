@@ -261,6 +261,13 @@ FakesAssemblies/
 # Node.js Tools for Visual Studio
 .ntvs_analysis.dat
 node_modules/
+frontend/node_modules/
+frontend/dist/
+DMS-DOTNETREACT/App_Data/
+DMS-DOTNETREACT/*.db
+DMS-DOTNETREACT/**/*.db
+DMS-DOTNETREACT/**/*.db-shm
+DMS-DOTNETREACT/**/*.db-wal
 
 # Visual Studio 6 build log
 *.plg
