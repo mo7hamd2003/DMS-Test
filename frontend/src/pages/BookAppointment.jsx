@@ -1,32 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDoctors, getAvailableDates, getTimeSlots, bookAppointment } from '../api';
-import '../BookAppointment.css';
+import { getDoctors, getAvailableDates, getTimeSlots, bookAppointment, getProfile } from '../api';
+import { useAuth } from '../contexts/AuthContext';
+// import '../BookAppointment.css'; // REMOVED: Using new Tailwind components
+
+// New Components
+import DoctorSelector from '../components/booking/DoctorSelector';
+import AppointmentCalendar from '../components/booking/AppointmentCalendar';
+import TimeSelector from '../components/booking/TimeSelector';
+import NoteSection from '../components/booking/NoteSection';
+import AppointmentForm from '../components/booking/AppointmentForm';
 
 const BookAppointment = () => {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const { user, openLoginModal } = useAuth();
+  
+  // Data States
   const [doctors, setDoctors] = useState([]);
-  const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [availableDates, setAvailableDates] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [availableDates, setAvailableDates] = useState([]); // ISO strings "YYYY-MM-DD"
   const [timeSlots, setTimeSlots] = useState([]);
-  const [selectedTime, setSelectedTime] = useState(null);
+  
+  // Selection States
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(null); // Date object
+  const [selectedTime, setSelectedTime] = useState(null); // Slot object
   const [notes, setNotes] = useState('');
+  
+  // UI States
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [message, setMessage] = useState(''); // Just a string for error passing mostly, or success via alert/toast ideally
+  const [error, setError] = useState('');
 
   // Check if user is logged in
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (error) {
-        console.error('Error parsing user:', error);
-      }
-    }
+    const verifyLogin = async () => {
+        try {
+            // Requirement: Call existing backend controller to verify status
+            await getProfile();
+        } catch (error) {
+            // Not logged in or token invalid
+            alert("You need to log in first.");
+            openLoginModal();
+            navigate('/');
+        }
+    };
+    verifyLogin();
   }, []);
 
   // Load doctors on mount
@@ -36,264 +54,203 @@ const BookAppointment = () => {
 
   const loadDoctors = async () => {
     try {
+        setLoading(true);
       const data = await getDoctors();
       setDoctors(data);
-      // Select first doctor by default if available
       if (data.length > 0) {
-        await selectDoctor(data[0]);
+        // Optional: Pre-select first doctor? Or let user choose.
+        // selectDoctor(data[0]); 
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: error.message });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+        setLoading(false);
     }
   };
 
-  // Helper to handle doctor selection
-  const selectDoctor = async (doctor) => {
+  const handleDoctorChange = async (doctorId) => {
+    const id = parseInt(doctorId);
+    const doctor = doctors.find(d => d.id === id);
+    if (!doctor) return;
+
     setSelectedDoctor(doctor);
     setSelectedDate(null);
     setSelectedTime(null);
     setTimeSlots([]);
-    setMessage({ type: '', text: '' });
-
-    if (doctor) {
-      setLoading(true);
-      try {
-        const dates = await getAvailableDates(doctor.id);
-        setAvailableDates(dates);
-      } catch (error) {
-        setMessage({ type: 'error', text: error.message });
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      setAvailableDates([]);
-    }
-  };
-
-  // Handle doctor dropdown change
-  const handleDoctorChange = (e) => {
-    const doctorId = parseInt(e.target.value);
-    const doctor = doctors.find(d => d.id === doctorId);
-    selectDoctor(doctor);
-  };
-
-  // Load time slots when date is selected
-  const handleDateClick = async (date) => {
-    if (!selectedDoctor) return;
+    setAvailableDates([]);
+    setError('');
     
-    setSelectedDate(date);
-    setSelectedTime(null);
     setLoading(true);
-
     try {
-      const slots = await getTimeSlots(selectedDoctor.id, date);
-      setTimeSlots(slots);
-    } catch (error) {
-      setMessage({ type: 'error', text: error.message });
+      const dates = await getAvailableDates(doctor.id);
+      setAvailableDates(dates || []);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Handle time slot selection
-  const handleTimeSelect = (slot) => {
+  const handleDateChange = async (date) => {
+    if (!selectedDoctor || !date) return;
+    
+    setSelectedDate(date);
+    setSelectedTime(null);
+    setLoading(true);
+    setError('');
+
+    try {
+        // API expects YYYY-MM-DD probably, but check existing logic. 
+        // Existing logic: await getTimeSlots(selectedDoctor.id, date);
+        // Date passed was string from map loop: `2024-05-20`
+        // But here `date` is Date object.
+        // Let's modify getTimeSlots call to format the date if needed. 
+        // Or if getTimeSlots handles Date object. 
+        // Checking previous file: `const date = ... string ...; handleDateClick(date)`
+        // So previous logic passed a STRING "YYYY-MM-DD".
+        // The API function probably expects valid date input.
+        
+        // Let's format it to "YYYY-MM-DD" just to be safe and match previous behavior.
+        // const dateStr = date.toISOString().split('T')[0]; 
+        // Use local date string to avoid timezone shifts if possible, or simple ISO slice.
+        const offset = date.getTimezoneOffset()
+        const dateLocal = new Date(date.getTime() - (offset*60*1000))
+        const dateStr = dateLocal.toISOString().split('T')[0]
+
+      const slots = await getTimeSlots(selectedDoctor.id, dateStr);
+      setTimeSlots(slots);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTimeChange = (slot) => {
     if (slot.isAvailable) {
       setSelectedTime(slot);
     }
   };
 
-  // Book appointment
-  const handleBookAppointment = async () => {
-    // Check if user is logged in
+  const onBook = async () => {
     if (!user) {
       navigate('/login');
       return;
     }
 
     if (!selectedDoctor || !selectedDate || !selectedTime) {
-      setMessage({ type: 'error', text: 'Please select doctor, date, and time' });
+      setError('Please complete all selection steps.');
       return;
     }
 
     setLoading(true);
-    setMessage({ type: '', text: '' });
+    setError('');
 
     try {
+        const offset = selectedDate.getTimezoneOffset()
+        const dateLocal = new Date(selectedDate.getTime() - (offset*60*1000))
+        const dateStr = dateLocal.toISOString().split('T')[0]
+
       const appointmentData = {
         doctorId: selectedDoctor.id,
-        appointmentDate: selectedDate,
+        appointmentDate: dateStr, // Send string as expected by backend likely
         appointmentTime: selectedTime.time,
         notes: notes || null
       };
 
       const result = await bookAppointment(appointmentData);
-      setMessage({ type: 'success', text: result.message || 'Appointment booked successfully!' });
       
-      // Reset form
+      // Success
+      alert(result.message || 'Appointment booked successfully!');
+      
+      // Reset
       setSelectedDoctor(null);
       setSelectedDate(null);
       setSelectedTime(null);
       setTimeSlots([]);
       setNotes('');
       setAvailableDates([]);
-    } catch (error) {
-      setMessage({ type: 'error', text: error.message });
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Calendar rendering
-  const renderCalendar = () => {
-    if (!selectedDoctor || availableDates.length === 0) {
-      return <p className="calendar-placeholder">Select a doctor to view available dates</p>;
-    }
-
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
-
-    const days = [];
-    
-    // Empty cells for days before month starts
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(<div key={`empty-${i}`} className="calendar-day empty"></div>);
-    }
-
-    // Days of the month
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const isAvailable = availableDates.includes(date);
-      const isSelected = selectedDate === date;
-
-      days.push(
-        <div
-          key={day}
-          className={`calendar-day ${isAvailable ? 'available' : 'unavailable'} ${isSelected ? 'selected' : ''}`}
-          onClick={() => isAvailable && handleDateClick(date)}
-        >
-          {day}
-        </div>
-      );
-    }
-
-    return (
-      <div className="calendar">
-        <div className="calendar-header">
-          <button onClick={() => setCurrentMonth(new Date(year, month - 1, 1))}>‹</button>
-          <h3>{firstDay.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</h3>
-          <button onClick={() => setCurrentMonth(new Date(year, month + 1, 1))}>›</button>
-        </div>
-        <div className="calendar-weekdays">
-          <div>Sun</div>
-          <div>Mon</div>
-          <div>Tue</div>
-          <div>Wed</div>
-          <div>Thu</div>
-          <div>Fri</div>
-          <div>Sat</div>
-        </div>
-        <div className="calendar-days">
-          {days}
-        </div>
-      </div>
-    );
-  };
-
   return (
-    <div className="book-appointment-container">
-      <h2>Book an Appointment</h2>
+    <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-300 p-4 md:p-8">
+      <main className="max-w-4xl mx-auto space-y-6">
+        <h1 className="text-3xl font-bold mb-6">Book Your Visit</h1>
+        
+        {/* Step 1: Doctor */}
+        <section>
+             <h2 className="text-xl font-semibold mb-3">Step 1: Select Doctor</h2>
+             <DoctorSelector 
+                doctors={doctors}
+                value={selectedDoctor?.id}
+                onChange={handleDoctorChange}
+                loading={loading}
+                error={error}
+             />
+        </section>
 
-      {message.text && (
-        <div className={`message ${message.type}`}>
-          {message.text}
-        </div>
-      )}
+        {/* Step 2: Date */}
+        {selectedDoctor && (
+        <section>
+            <h2 className="text-xl font-semibold mb-3">Step 2: Choose Date</h2>
+            <AppointmentCalendar
+                selectedDate={selectedDate}
+                onChange={handleDateChange}
+                availableDates={availableDates}
+                disabled={loading}
+            />
+        </section>
+        )}
 
-      {/* Doctor Selection */}
-      <div className="form-section">
-        <label>Select Doctor</label>
-        <select 
-          value={selectedDoctor?.id || ''} 
-          onChange={handleDoctorChange}
-          disabled={loading}
-        >
-          <option value="">-- Choose a doctor --</option>
-          {doctors.map(doctor => (
-            <option key={doctor.id} value={doctor.id}>
-              {doctor.fullName} - {doctor.specialization}
-            </option>
-          ))}
-        </select>
-      </div>
+        {/* Step 3: Time */}
+        {selectedDate && (
+             <section>
+                 <div className="mt-6">
+                    <TimeSelector
+                        timeSlots={timeSlots}
+                        value={selectedTime}
+                        onChange={handleTimeChange}
+                        disabled={loading}
+                    />
+                    {timeSlots.length === 0 && !loading && (
+                        <p className="text-gray-500 text-sm mt-2">No available time slots for this date.</p>
+                    )}
+                 </div>
+             </section>
+        )}
 
-      {/* Calendar */}
-      {selectedDoctor && (
-        <div className="form-section">
-          <label>Select Date</label>
-          {renderCalendar()}
-        </div>
-      )}
+        {/* Step 4: Notes */}
+        {selectedTime && (
+            <section>
+                <div className="mt-6">
+                    <NoteSection value={notes} onChange={setNotes} />
+                </div>
+            </section>
+        )}
 
-      {/* Time Slots */}
-      {selectedDate && timeSlots.length > 0 && (
-        <div className="form-section">
-          <label>Select Time</label>
-          <div className="time-slots-grid">
-            {timeSlots.map((slot, index) => (
-              <button
-                key={index}
-                className={`time-slot ${slot.isAvailable ? 'available' : 'reserved'} ${selectedTime?.time === slot.time ? 'selected' : ''}`}
-                onClick={() => handleTimeSelect(slot)}
-                disabled={!slot.isAvailable}
-              >
-                {slot.displayTime}
-              </button>
-            ))}
-          </div>
-          <div className="legend">
-            <span className="legend-item"><span className="color-box available"></span> Available</span>
-            <span className="legend-item"><span className="color-box reserved"></span> Reserved</span>
-          </div>
-        </div>
-      )}
+        {/* Step 5: Summary & Submit */}
+        {selectedTime && (
+            <section>
+                <div className="mt-6">
+                    <h2 className="text-xl font-semibold mb-3">Step 5: Confirm Booking</h2>
+                    <AppointmentForm
+                        doctor={selectedDoctor}
+                        date={selectedDate}
+                        time={selectedTime}
+                        onSubmit={onBook}
+                        loading={loading}
+                        error={error}
+                    />
+                </div>
+            </section>
+        )}
 
-      {/* Notes */}
-      {selectedTime && (
-        <div className="form-section">
-          <label>Notes (Optional)</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add any notes or special requests..."
-            maxLength={500}
-            rows={4}
-          />
-          <small>{notes.length}/500 characters</small>
-        </div>
-      )}
-
-      {/* Booking Summary */}
-      {selectedDoctor && selectedDate && selectedTime && (
-        <div className="booking-summary">
-          <h3>Booking Summary</h3>
-          <p><strong>Doctor:</strong> {selectedDoctor.fullName} ({selectedDoctor.specialization})</p>
-          <p><strong>Date:</strong> {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-          <p><strong>Time:</strong> {selectedTime.displayTime}</p>
-        </div>
-      )}
-
-      {/* Book Button */}
-      <button
-        className="book-button"
-        onClick={handleBookAppointment}
-        disabled={!selectedDoctor || !selectedDate || !selectedTime || loading}
-      >
-        {loading ? 'Booking...' : 'Book Appointment'}
-      </button>
+      </main>
     </div>
   );
 };

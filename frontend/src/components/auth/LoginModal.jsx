@@ -70,13 +70,13 @@ const LoginModal = ({ isOpen, onClose, onLogin }) => {
   };
 
   const validationPatterns = {
-    phoneNumber: /^\d+$/, // DMS expects just digits
+    phoneNumber: /^\d{8,}$/, // At least 8 digits
     username: /^[a-zA-Z0-9._-]{3,30}$/,
     fullName: /^[a-zA-Z\s]{2,50}$/,
   };
 
   const validationMessages = {
-    phoneNumber: 'Phone must contain only numbers',
+    phoneNumber: 'Phone must contain at least 8 numbers',
     username: 'Username must be 3-30 characters (letters, numbers, dot, underscore, hyphen)',
     password: 'Password does not meet all requirements',
     fullName: 'Full name must be 2-50 characters (letters and spaces only)',
@@ -168,6 +168,9 @@ const LoginModal = ({ isOpen, onClose, onLogin }) => {
   }, [isOpen]);
 
   const validateField = (name, value) => {
+    // Optional fields check
+    if (!value && (name === 'dateOfBirth' || name === 'gender')) return '';
+    
     if (!value) return 'This field is required';
     
     if (name === 'password' && !isLogin) {
@@ -220,7 +223,7 @@ const LoginModal = ({ isOpen, onClose, onLogin }) => {
     const newErrors = {};
     const fieldsToValidate = isLogin 
       ? ['username', 'password']
-      : ['fullName', 'username', 'phoneNumber', 'dateOfBirth', 'gender', 'password', 'confirmPassword'];
+      : ['fullName', 'username', 'phoneNumber', 'password', 'confirmPassword']; // DOB and Gender are optional now
 
     fieldsToValidate.forEach(field => {
       const errorMsg = validateField(field, formData[field]);
@@ -494,12 +497,12 @@ const LoginModal = ({ isOpen, onClose, onLogin }) => {
                   <form onSubmit={handleSubmit} className="space-y-5">
                     {renderInput('fullName', 'Full Name', 'text', <UserCircle size={18} />, 'John Doe')}
                     {renderInput('username', 'Username', 'text', <User size={18} />, 'johndoe123')}
-                    {renderInput('phoneNumber', 'Phone Number', 'tel', <Phone size={18} />, '70123456')}
+                    {renderInput('phoneNumber', 'Phone Number', 'number', <Phone size={18} />, '70123456')}
                     
                     {/* Date of Birth */}
                     <div className="space-y-1">
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Date of Birth <span className="text-red-500">*</span>
+                        Date of Birth
                       </label>
                       <div className="relative">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -527,7 +530,7 @@ const LoginModal = ({ isOpen, onClose, onLogin }) => {
                     {/* Gender Dropdown */}
                     <div className="space-y-1 relative" ref={genderDropdownRef}>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                        Gender <span className="text-red-500">*</span>
+                        Gender
                       </label>
                       <button
                         type="button"
